@@ -1,0 +1,1 @@
+curl -X pcurl -X POST http://localhost:8071/actuator/shutdown

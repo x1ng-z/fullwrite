@@ -1,0 +1,1 @@
+D:\Ocean\jdk32_.8.0_231\bin\java.exe  -jar "D:\Ocean\fullwrite-0.0.1-SNAPSHOT.war"

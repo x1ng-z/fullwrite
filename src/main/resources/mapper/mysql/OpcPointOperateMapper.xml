@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="hs.fullwrite.dao.mysql.OpcPointOperate">
+    <resultMap id="pointid" type="hs.fullwrite.bean.Point">
+        <id property="pointid" column="pointid"/>
+        <result property="tag" column="tag"/>
+        <result property="notion" column="notion"/>
+        <result property="type" column="type"/>
+        <result property="writeable" column="writeable"/>
+        <result property="opcserveid" column="opcserveid"/>
+        <result property="resouce" column="resouce"/>
+        <result property="standard" column="standard"/>
+    </resultMap>
+
+
+
+<!--    int inserOpcPoint(@Param("point") Point point);-->
+    <insert id="inserOpcPoint" parameterType="hs.fullwrite.bean.Point" useGeneratedKeys="true" keyProperty="pointid">
+    insert into point(tag,notion,type,writeable,opcserveid,resouce,standard)
+    value (#{point.tag},#{point.notion},#{point.type},#{point.writeable},#{point.opcserveid},#{point.resouce},#{point.standard})
+    </insert>
+
+<!--    int deleteOpcPoint(@Param("pointid") int pointid);-->
+    <delete id="deleteOpcPoint">
+        delete from point
+        where pointid=#{pointid}
+    </delete>
+
+<!--    int updateOpcPoint(@Param("point") Point point);-->
+    <update id="updateOpcPoint" parameterType="hs.fullwrite.bean.Point">
+        update point
+        set  tag=#{point.tag},notion=#{point.notion},type=#{point.type},writeable=#{point.writeable},opcserveid=#{point.opcserveid},resouce=#{point.resouce},standard=#{point.standard}
+        where pointid=#{point.pointid}
+    </update>
+
+<!--    Point findOpcPointbyid(@Param("pointid") int pointid);-->
+    <select id="findOpcPointbyid" resultType="hs.fullwrite.bean.Point">
+      select * from point
+      where pointid=#{pointid}
+    </select>
+
+
+<!--    List<Point> findAllPoints();-->
+    <select id="findAllTypePoints" resultType="hs.fullwrite.bean.Point">
+      select * from point
+    </select>
+
+<!--    List<Point> findAllPointsByServeid(@Param("serveid") int serveid);-->
+    <select id="findAllOpcPointsByServeid" resultType="hs.fullwrite.bean.Point">
+      select * from point where opcserveid=#{serveid} and resouce='opc'
+    </select>
+
+
+    <!--    List<Point> findAllMesPoints();-->
+    <select id="findAllMesPoints" resultType="hs.fullwrite.bean.Point">
+      select * from point where resouce='mes'
+    </select>
+
+    <!--    int insertMesPoints(@Param("point") Point point);-->
+    <insert id="insertMesPoints" parameterType="hs.fullwrite.bean.Point" useGeneratedKeys="true" keyProperty="pointid">
+    insert into point(tag,notion,type,writeable,opcserveid,resouce,standard)
+    value (#{point.tag},#{point.notion},#{point.type},#{point.writeable},#{point.opcserveid},#{point.resouce},#{point.standard})
+    </insert>
+
+
+    <!--    List<Point> findAllMesPointsByid(@Param("pointid")int pointid);-->
+    <select id="findMesPointsByid" resultType="hs.fullwrite.bean.Point">
+      select * from point
+      where pointid=#{pointid}
+    </select>
+
+    <!--    int deleteMesPointsByid(@Param("pointid")int pointid);-->
+    <delete id="deleteMesPointsByid">
+        delete from point
+        where pointid=#{pointid}
+    </delete>
+
+    <!--    int updateMesPoints(@Param("point") Point point);-->
+    <update id="updateMesPoints" parameterType="hs.fullwrite.bean.Point">
+        update point
+        set  tag=#{point.tag},notion=#{point.notion},type=#{point.type},writeable=#{point.writeable},opcserveid=#{point.opcserveid},resouce=#{point.resouce},standard=#{point.standard}
+        where pointid=#{point.pointid}
+    </update>
+
+
+</mapper>

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="hs.fullwrite.dao.mysql.OpcServeOperate">
+    <resultMap id="opcServeInfoid" type="hs.fullwrite.bean.OpcServeInfo">
+        <id property="serveid" column="serveid"/>
+        <result property="servename" column="servename"/>
+        <result property="serveip" column="serveip"/>
+    </resultMap>
+
+
+<!--    int inserOpcServe(@Param("opcserve") OpcServeInfo opcserve);-->
+    <insert id="inserOpcServe" parameterType="hs.fullwrite.bean.OpcServeInfo" useGeneratedKeys="true" keyProperty="serveid">
+    insert into opcserve(servename,serveip)
+    value (#{opcserve.servename},#{opcserve.serveip})
+    </insert>
+
+<!--    int deleteOpcServe(@Param("serveid") int serveid);-->
+    <delete id="deleteOpcServe">
+        delete from opcserve
+        where serveid=#{serveid}
+    </delete>
+<!--    int updateOpcServe(@Param("opcserve") OpcServeInfo opcserve);-->
+    <update id="updateOpcServe" parameterType="hs.fullwrite.bean.OpcServeInfo">
+        update opcserve
+        set  servename=#{opcserve.servename},serveip=#{opcserve.serveip}
+        where serveid=#{opcserve.serveid}
+    </update>
+
+<!--    OpcServeInfo findOpcServebyid(@Param("serveid") int serveid);-->
+    <select id="findOpcServebyid" resultType="hs.fullwrite.bean.OpcServeInfo">
+      select * from opcserve
+      where serveid=#{serveid}
+    </select>
+
+<!--    List<OpcServeInfo> findAllOpcServe();-->
+    <select id="findAllOpcServe" resultType="hs.fullwrite.bean.OpcServeInfo">
+      select * from opcserve
+    </select>
+
+
+
+
+
+</mapper>
