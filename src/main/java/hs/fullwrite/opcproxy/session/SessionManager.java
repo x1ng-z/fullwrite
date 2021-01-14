@@ -18,58 +18,38 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SessionManager {
     private Logger logger = LoggerFactory.getLogger(SessionManager.class);
 
-    //key nodeid
-    private Map<Integer,Session> modulepoolbynodeid =new ConcurrentHashMap<>();
-    //key tcp port
-    private Map<Integer,Session> modulepoolbytcpport =new ConcurrentHashMap<>();
-    public void addSessionModule(int nodeid, ChannelHandlerContext ctx){
-        InetSocketAddress ipSocket = (InetSocketAddress) ctx.channel().remoteAddress();
-        String clientIp = ipSocket.getAddress().getHostAddress();
-        Integer port = ipSocket.getPort();
-        if(!modulepoolbynodeid.containsKey(nodeid)){
-            Session session=new Session();
+    private Map<ChannelHandlerContext, Session> modulepool = new ConcurrentHashMap<>();
+
+    public synchronized void addSessionModule(int nodeid, String function, ChannelHandlerContext ctx) {
+        if (!modulepool.containsKey(ctx)) {
+            Session session = new Session();
             session.setCtx(ctx);
-            session.setTcpPort(port);
+            session.setFunction(function);
             session.setOpcserveid(nodeid);
-            modulepoolbynodeid.put(nodeid,session);
-            modulepoolbytcpport.put(port,session);
+            modulepool.put(ctx, session);
         }
 
     }
 
 
-    public void removeSessionModule(Integer nodeid, ChannelHandlerContext ctx){
-
-        if(ctx!=null){
-            InetSocketAddress ipSocket = (InetSocketAddress) ctx.channel().remoteAddress();
-            String clientIp = ipSocket.getAddress().getHostAddress();
-            Integer port = ipSocket.getPort();
-            Session session=modulepoolbytcpport.remove(port);
-            if(session!=null){
-                modulepoolbynodeid.remove(session.getOpcserveid());
-            }else {
-                logger.warn("session is null");
-            }
-
-
-        }else if(nodeid!=null){
-            Session session=modulepoolbynodeid.remove(nodeid);
-            if(session!=null){
-                modulepoolbytcpport.remove(session.getTcpPort());
-                session.getCtx().close();
-            }else {
-                logger.warn("session is null");
-            }
-
+    public synchronized Session removeSessionModule(ChannelHandlerContext ctx) {
+        if (ctx != null) {
+            return modulepool.remove(ctx);
         }
-
+        return null;
     }
 
-    public Map<Integer, Session> getModulepoolbynodeid() {
-        return modulepoolbynodeid;
+    public synchronized Session  getSpecialSession(int opcserveid,String function){
+
+        for(Session session:modulepool.values()){
+            if(session.getOpcserveid()==opcserveid&&session.getFunction().equals(function)){
+                return session;
+            }
+        }
+        return null;
     }
 
-    public Map<Integer, Session> getModulepoolbytcpport() {
-        return modulepoolbytcpport;
+    public Map<ChannelHandlerContext, Session> getModulepool() {
+        return modulepool;
     }
 }

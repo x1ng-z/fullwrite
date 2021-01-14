@@ -10,8 +10,8 @@ import io.netty.channel.ChannelHandlerContext;
 public class Session {
    // private Module object;//apc module;
     private ChannelHandlerContext ctx;
-    private Integer tcpPort;
     private int opcserveid;
+    private String function;
 
 
     public ChannelHandlerContext getCtx() {
@@ -23,20 +23,19 @@ public class Session {
     }
 
 
-
-    public Integer getTcpPort() {
-        return tcpPort;
-    }
-
-    public void setTcpPort(Integer tcpPort) {
-        this.tcpPort = tcpPort;
-    }
-
     public int getOpcserveid() {
         return opcserveid;
     }
 
     public void setOpcserveid(int opcserveid) {
         this.opcserveid = opcserveid;
+    }
+
+    public String getFunction() {
+        return function;
+    }
+
+    public void setFunction(String function) {
+        this.function = function;
     }
 }

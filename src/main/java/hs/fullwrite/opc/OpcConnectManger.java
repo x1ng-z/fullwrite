@@ -5,9 +5,7 @@ import hs.fullwrite.bean.Point;
 import hs.fullwrite.dao.service.OpcPointOperateService;
 import hs.fullwrite.dao.service.OpcServeOperateService;
 import hs.fullwrite.longTimeServe.InfluxdbWrite;
-import hs.fullwrite.opc.event.Event;
 import hs.fullwrite.opc.event.RegisterEvent;
-import hs.fullwrite.opc.event.WriteEvent;
 import hs.fullwrite.opcproxy.session.SessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * @author zzx
@@ -33,7 +30,7 @@ public class OpcConnectManger /*implements Runnable*/ {
     private Logger logger = LoggerFactory.getLogger(OpcConnectManger.class);
 
     private Map<Integer, OpcServeInfo> opcservepool = new ConcurrentHashMap();
-    private Map<Integer, OpcExecute> opcconnectpool = new ConcurrentHashMap();
+    private Map<Integer, OpcGroup> opcconnectpool = new ConcurrentHashMap();
 
     private SessionManager sessionManager;
 
@@ -42,6 +39,7 @@ public class OpcConnectManger /*implements Runnable*/ {
     private String opcservedir;
     private String nettypoty;
 
+    private int opcsaveinterval;
     private OpcServeOperateService opcServeOperateService;
 
 
@@ -53,6 +51,7 @@ public class OpcConnectManger /*implements Runnable*/ {
     @Autowired
     public OpcConnectManger(@Value("${opcservedir}") String opcservedir,
                             @Value("${nettyport}") String nettypoty,
+                            @Value("${opcsaveinterval}") int opcsaveinterval,
                             InfluxdbWrite influxdbWrite,
                             OpcServeOperateService opcServeOperateService,
                             OpcPointOperateService opcPointOperateService,
@@ -63,27 +62,30 @@ public class OpcConnectManger /*implements Runnable*/ {
         this.executorService = executorService;
         this.sessionManager = sessionManager;
         this.nettypoty = nettypoty;
-        this.opcservedir=opcservedir;
+        this.opcservedir = opcservedir;
+        this.opcsaveinterval = opcsaveinterval;
 //        executorService.execute(this);
     }
 
-    private OpcExecute connectinit(OpcServeInfo serveInfo) {
+    private OpcGroup connectinit(OpcServeInfo serveInfo) {
 
-        OpcExecute opcExecute= new OpcExecute(serveInfo,opcservedir, "127.0.0.1", nettypoty,serveInfo.getServename(),serveInfo.getServeip(),serveInfo.getServeid()+"",sessionManager,influxdbWrite);
+        OpcGroup opcGroup = new OpcGroup();
+        OpcExecute readopcexecute = new OpcExecute(opcsaveinterval,OpcExecute.FUNCTION_READ, serveInfo, opcservedir, "127.0.0.1", nettypoty, serveInfo.getServename(), serveInfo.getServeip(), serveInfo.getServeid() + "", sessionManager, influxdbWrite);
+        OpcExecute writeopcexecute = new OpcExecute(opcsaveinterval,OpcExecute.FUNCTION_WRITE, serveInfo, opcservedir, "127.0.0.1", nettypoty, serveInfo.getServename(), serveInfo.getServeip(), serveInfo.getServeid() + "", sessionManager, influxdbWrite);
 
-        List<Point> pointsByServeid = opcPointOperateService.findAllPointsByServeid(serveInfo.getServeid());
+        opcGroup.setReadopcexecute(readopcexecute);
+        opcGroup.setWriteopcexecute(writeopcexecute);
 
-
+        List<Point> pointsByServeid = opcPointOperateService.findAllOpcPointsByServeid(serveInfo.getServeid());
         for (Point point : pointsByServeid) {
             RegisterEvent registerEvent = new RegisterEvent();
             registerEvent.setPoint(point);
-            opcExecute.addOPCEvent(registerEvent);
-//            if (point.getWriteable() == 1) {
-//                writeopcConnect.addOPCEvent(registerEvent);
-//            }
+            readopcexecute.addOPCEvent(registerEvent);
+            if (point.getWriteable() == 1) {
+                writeopcexecute.addOPCEvent(registerEvent);
+            }
         }
-
-        return opcExecute;
+        return opcGroup;
     }
 
     @PostConstruct
@@ -91,11 +93,12 @@ public class OpcConnectManger /*implements Runnable*/ {
         List<OpcServeInfo> opcServeInfos = opcServeOperateService.findAllOpcServe();
         for (OpcServeInfo serveInfo : opcServeInfos) {
 
-            OpcExecute execute = connectinit(serveInfo);
+            OpcGroup opcGroup = connectinit(serveInfo);
 
-            executorService.execute(execute);
+            executorService.execute(opcGroup.getReadopcexecute());
+            executorService.execute(opcGroup.getWriteopcexecute());
 
-            opcconnectpool.put(serveInfo.getServeid(),execute);
+            opcconnectpool.put(serveInfo.getServeid(), opcGroup);
             opcservepool.put(serveInfo.getServeid(), serveInfo);
 
 
@@ -107,9 +110,12 @@ public class OpcConnectManger /*implements Runnable*/ {
     @PreDestroy
     void close() {
         logger.info("opc connect try to shutdown");
-        for (OpcExecute opcExecute : opcconnectpool.values()) {
-            opcExecute.sendStopItemsCmd();
-            opcExecute.getExecutePythonBridge().stop();
+        for (OpcGroup opcGroup : opcconnectpool.values()) {
+            opcGroup.getReadopcexecute().sendStopItemsCmd();
+            opcGroup.getReadopcexecute().getExecutePythonBridge().stop();
+
+            opcGroup.getWriteopcexecute().sendStopItemsCmd();
+            opcGroup.getWriteopcexecute().getExecutePythonBridge().stop();
         }
     }
 
@@ -118,37 +124,8 @@ public class OpcConnectManger /*implements Runnable*/ {
         return opcservepool;
     }
 
-    public Map<Integer, OpcExecute> getOpcconnectpool() {
+    public Map<Integer, OpcGroup> getOpcconnectpool() {
         return opcconnectpool;
     }
 
-//    @Override
-//    public void run() {
-//        while (!Thread.currentThread().isInterrupted()) {
-//            try {
-//                Integer opcserid = eventLinkedBlockingQueue.take();
-//                OpcServeInfo opcServebyid = opcServeOperateService.findOpcServebyid(opcserid);
-//                OpcConnIntegrated opcConnIntegrated = connectinit(opcServebyid);
-//
-//                //运行opc连接
-//                executorService.execute(opcConnIntegrated.getReadconn());
-//                executorService.execute(opcConnIntegrated.getWriteconn());
-//
-//
-//                //停止旧的
-//                OpcConnIntegrated reomveconnect = opcconnectpool.remove(opcServebyid.getServeid());
-//                reomveconnect.getWriteconn().setShouldRun(true);
-//                reomveconnect.getWriteconn().disconnect();
-//
-//                reomveconnect.getReadconn().setShouldRun(true);
-//                reomveconnect.getReadconn().disconnect();
-//
-//                //更新集成连接
-//                opcconnectpool.put(opcServebyid.getServeid(), opcConnIntegrated);
-//                opcservepool.put(opcServebyid.getServeid(), opcServebyid);
-//            } catch (InterruptedException e) {
-//                logger.error(e.getMessage(), e);
-//            }
-//        }
-//    }
 }

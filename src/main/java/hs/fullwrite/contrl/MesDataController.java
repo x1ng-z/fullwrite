@@ -59,17 +59,23 @@ public class MesDataController {
             for (int index = 0; index < jsonArray.size(); index++) {
 
                 JSONObject subjson = jsonArray.getJSONObject(index);
+                String influxdbkey=subjson.getString("tagName");
+                //不包含的点号存储起来
                 if (!mesAlreadyExistTags.containsKey(subjson.getString("tagName"))) {
                     Point newpoint = new Point();
                     newpoint.setTag(subjson.getString("tagName"));
                     newpoint.setType(Point.FLOATTYPE);
                     newpoint.setResouce(Point.MESRESOURCE);
                     opcPointOperateService.insertMesPoints(newpoint);
+                }else {
+                    Point exitpoint=mesAlreadyExistTags.get(subjson.getString("tagName"));
+                    influxdbkey=((exitpoint.getStandard()==null)||(exitpoint.getStandard().equals("")))?exitpoint.getTag():exitpoint.getStandard();
                 }
                 InfluxWriteEvent writeEvent = new InfluxWriteEvent();
 
                 JSONObject writecontext = new JSONObject();
-                writecontext.put(subjson.getString("tagName"), subjson.getFloatValue("val"));
+
+                writecontext.put(influxdbkey, subjson.getFloatValue("val"));
 
                 writeEvent.setMeasurement(InfluxdbOperateService.MESMEASUERMENT);
                 writeEvent.setTimestamp(subjson.getLongValue("ts"));

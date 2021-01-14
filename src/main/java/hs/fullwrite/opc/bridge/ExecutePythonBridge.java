@@ -14,14 +14,17 @@ public class ExecutePythonBridge {
     private String opcseveip;
     private String opcsevid;
     private String exename;
+    private String function;
 
-    public ExecutePythonBridge(String exename, String ip, String port, String opcsevename, String opcseveip, String opcsevid) {
+    public ExecutePythonBridge(String exename, String ip, String port, String opcsevename, String opcseveip, String opcsevid, String function) {
         this.exename = exename;
         this.ip = ip;
         this.port = port;
         this.opcsevename = opcsevename;
         this.opcseveip = opcseveip;
         this.opcsevid = opcsevid;
+        this.function = function;
+
     }
 
     public boolean stop() {
@@ -50,7 +53,8 @@ public class ExecutePythonBridge {
                     port,
                     opcsevename,
                     opcseveip,
-                    opcsevid});
+                    opcsevid,
+                    function});
             result = new Thread(new InputStreamRunnable(p.getInputStream(), "Result", null));
             result.setDaemon(true);
             result.start();

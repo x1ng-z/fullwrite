@@ -32,9 +32,9 @@ public class OPCValueController {
         String[] splittags = tags.split(",");
         try {
             for (String tag : splittags) {
-                for (OpcExecute opcExecute : opcConnectManger.getOpcconnectpool().values()) {
-                    if (opcExecute.getRegisteredMeasurePoint().containsKey(tag)) {
-                        msg.put(tag, opcExecute.getRegisteredMeasurePoint().get(tag).getValue());
+                for (OpcGroup opcGroup : opcConnectManger.getOpcconnectpool().values()) {
+                    if (opcGroup.getReadopcexecute().getRegisteredMeasurePoint().containsKey(tag)) {
+                        msg.put(tag, opcGroup.getReadopcexecute().getRegisteredMeasurePoint().get(tag).getValue());
                         break;
                     }
                 }
@@ -58,14 +58,14 @@ public class OPCValueController {
             for (String tag : msg.keySet()) {
                 System.out.println(tag + "-------" + msg.getFloat(tag));
 
-                for (OpcExecute opcExecute : opcConnectManger.getOpcconnectpool().values()) {
+                for (OpcGroup opcGroup : opcConnectManger.getOpcconnectpool().values()) {
 
-                    if (opcExecute.getRegisteredMeasurePoint().containsKey(tag)) {
-                        if(opcExecute.isOpcServeOnline()){
+                    if (opcGroup.getWriteopcexecute().getRegisteredMeasurePoint().containsKey(tag)) {
+                        if(opcGroup.getWriteopcexecute().isOpcServeOnline()){
                             WriteEvent writeEvent = new WriteEvent();
-                            writeEvent.setPoint(opcExecute.getRegisteredMeasurePoint().get(tag).getPoint());
+                            writeEvent.setPoint(opcGroup.getWriteopcexecute().getRegisteredMeasurePoint().get(tag).getPoint());
                             writeEvent.setValue(msg.getFloat(tag));
-                            writeresult = opcExecute.addOPCEvent(writeEvent);
+                            writeresult = opcGroup.getWriteopcexecute().addOPCEvent(writeEvent);
                             logger.info("add write event");
                             break;
                         }else {

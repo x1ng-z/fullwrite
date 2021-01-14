@@ -53,7 +53,7 @@ public class OpcPointOperateService {
 
     @Transactional(isolation = Isolation.READ_COMMITTED,transactionManager="mysqlTransactionManager")
 
-    public List<Point> findAllPointsByServeid(int serveid){
+    public List<Point> findAllOpcPointsByServeid(int serveid){
         return opcPointOperate.findAllOpcPointsByServeid(serveid);
     }
 

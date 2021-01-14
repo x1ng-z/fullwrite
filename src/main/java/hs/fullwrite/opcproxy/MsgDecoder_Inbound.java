@@ -3,6 +3,8 @@ package hs.fullwrite.opcproxy;
 
 import com.alibaba.fastjson.JSONObject;
 import hs.fullwrite.opc.OpcConnectManger;
+import hs.fullwrite.opc.OpcExecute;
+import hs.fullwrite.opcproxy.session.Session;
 import hs.fullwrite.opcproxy.session.SessionManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
@@ -28,15 +30,13 @@ public class MsgDecoder_Inbound extends ChannelInboundHandlerAdapter {
     private OpcConnectManger opcConnectManger;
 
 
-
     @Autowired
-    public MsgDecoder_Inbound(SessionManager sessionManager,OpcConnectManger opcConnectManger) {
+    public MsgDecoder_Inbound(SessionManager sessionManager, OpcConnectManger opcConnectManger) {
         super();
-        this.sessionManager=sessionManager;
-        this.opcConnectManger=opcConnectManger;
+        this.sessionManager = sessionManager;
+        this.opcConnectManger = opcConnectManger;
 
     }
-
 
 
     @Override
@@ -49,9 +49,6 @@ public class MsgDecoder_Inbound extends ChannelInboundHandlerAdapter {
         logger.info("come in " + clientIp + ":" + port);
         //todo 临时先发送一段数据给
 
-
-
-
     }
 
     @Override
@@ -60,8 +57,9 @@ public class MsgDecoder_Inbound extends ChannelInboundHandlerAdapter {
         InetSocketAddress ipSocket = (InetSocketAddress) ctx.channel().remoteAddress();
         String clientIp = ipSocket.getAddress().getHostAddress();
         Integer port = ipSocket.getPort();
-        logger.info("come out" + clientIp + ":" + port);
-        sessionManager.removeSessionModule(null,ctx);
+        logger.info("come out " + clientIp + ":" + port);
+//        sessionManager.removeSessionModule(null,ctx);
+        sessionManager.removeSessionModule(ctx);
 
     }
 
@@ -81,64 +79,97 @@ public class MsgDecoder_Inbound extends ChannelInboundHandlerAdapter {
                 wait_for_read.readBytes(bytes);
                 //提取命令
                 byte[] opcserveidarray = Arrays.copyOfRange(bytes, 3, 7);//header
-                int opcserveid=byteToInt(opcserveidarray);
+                int opcserveid = byteToInt(opcserveidarray);
                 byte[] command = Arrays.copyOfRange(bytes, 2, 3);//cmd
-                JSONObject paramjson=null;
+                JSONObject paramjson = null;
                 switch (command[0]) {
                     case 0x03:
-                        if(CommandImp.STATUS.valid(bytes)) {
+                        if (CommandImp.STATUS.valid(bytes)) {
                             logger.info("STATUS");
-                            logger.info("opcserveid="+opcserveid+":"+CommandImp.STATUS.analye(bytes).toJSONString());
+                            logger.info("opcserveid=" + opcserveid + ":" + CommandImp.STATUS.analye(bytes).toJSONString());
                         }
                         break;
                     case 0x04:
-                        if(CommandImp.HEART.valid(bytes)){
-                            JSONObject heartmsg=CommandImp.HEART.analye(bytes);
+                        if (CommandImp.HEART.valid(bytes)) {
+                            JSONObject heartmsg = CommandImp.HEART.analye(bytes);
                             logger.info(heartmsg.toJSONString());
-                            sessionManager.addSessionModule(opcserveid,ctx);
+                            sessionManager.addSessionModule(opcserveid, heartmsg.getString("function"), ctx);
+
+                            if (heartmsg.getString("function").equals(OpcExecute.FUNCTION_WRITE) && (opcConnectManger.getOpcconnectpool().get(opcserveid).getWriteopcexecute().getReconnectcount() > 0)) {
+                                opcConnectManger.getOpcconnectpool().get(opcserveid).getWriteopcexecute().getExecutePythonBridge().stop();
+                                opcConnectManger.getOpcconnectpool().get(opcserveid).getWriteopcexecute().minsReconnectcount();
+                                Session session = sessionManager.removeSessionModule(ctx);
+                                if (session != null) {
+                                    session.getCtx().close();
+                                }
+                                opcConnectManger.getOpcconnectpool().get(opcserveid).getWriteopcexecute().reconnect();
+                                break;
+                            }
                         }
                         break;
                     case 0x05:
-                        if(CommandImp.ACK.valid(bytes)){
+                        if (CommandImp.ACK.valid(bytes)) {
                             logger.info(CommandImp.ACK.analye(bytes).toJSONString());
                         }
                         break;
                     case 0x07:
-                        if(CommandImp.OPCREADRESULT.valid(bytes)){
+                        if (CommandImp.OPCREADRESULT.valid(bytes)) {
+                            JSONObject readjson = CommandImp.OPCREADRESULT.analye(bytes);
+                            if (readjson.getString("function").equals(OpcExecute.FUNCTION_READ) && (opcConnectManger.getOpcconnectpool().get(opcserveid).getReadopcexecute().getReconnectcount() > 0)) {
+                                opcConnectManger.getOpcconnectpool().get(opcserveid).getReadopcexecute().getExecutePythonBridge().stop();
+                                opcConnectManger.getOpcconnectpool().get(opcserveid).getReadopcexecute().minsReconnectcount();
+                                Session session = sessionManager.removeSessionModule(ctx);
+                                if (session != null) {
+                                    session.getCtx().close();
+                                }
+                                opcConnectManger.getOpcconnectpool().get(opcserveid).getReadopcexecute().reconnect();
 
-                            if(opcConnectManger.getOpcconnectpool().get(opcserveid).getReconnectcount()>0){
-                                opcConnectManger.getOpcconnectpool().get(opcserveid).getExecutePythonBridge().stop();
-                                opcConnectManger.getOpcconnectpool().get(opcserveid).minsReconnectcount();
-                                sessionManager.removeSessionModule(opcserveid,null);
-                                opcConnectManger.getOpcconnectpool().get(opcserveid).reconnect();
+                                //知道已经断线了，那么也重连下write的opc
+                                Session writesession = sessionManager.getSpecialSession(opcserveid,OpcExecute.FUNCTION_WRITE);
+                                if (writesession != null) {
+                                    sessionManager.removeSessionModule(writesession.getCtx());
+                                    writesession.getCtx().close();
+                                }
+                                opcConnectManger.getOpcconnectpool().get(opcserveid).getWriteopcexecute().reconnect();
+
                                 break;
 
                             }
-                            opcConnectManger.getOpcconnectpool().get(opcserveid).dealReadAllItemsResult(CommandImp.OPCREADRESULT.analye(bytes));
-//                            logger.info(CommandImp.OPCREADRESULT.analye(bytes).toJSONString());
+                            opcConnectManger.getOpcconnectpool().get(opcserveid).getReadopcexecute().dealReadAllItemsResult(readjson);
+                            logger.info(readjson.toJSONString());
 //                            opcConnectManger.getOpcconnectpool().get(opcserveid).sendWriteItemCmd("Channel_4.Device_5.Short_1",1);
 
                         }
                         break;
                     case 0x08:
-                        if(CommandImp.OPCWRITERESULT.valid(bytes)){
+                        if (CommandImp.OPCWRITERESULT.valid(bytes)) {
                             logger.info("OPCWRITERESULT");
                             logger.debug(CommandImp.OPCWRITERESULT.analye(bytes).toJSONString());
                         }
                         break;
                     case 0x0b:
-                        if(CommandImp.ADDITEMRESULT.valid(bytes)){
+                        if (CommandImp.ADDITEMRESULT.valid(bytes)) {
                             logger.info("ADDITEMRESULT");
-                            opcConnectManger.getOpcconnectpool().get(opcserveid).dealAddItemResult( CommandImp.ADDITEMRESULT.analye(bytes));
-                            logger.debug(CommandImp.ADDITEMRESULT.analye(bytes).toJSONString());
-
+                            JSONObject addjson = CommandImp.ADDITEMRESULT.analye(bytes);
+                            if (addjson.getString("function").equals(OpcExecute.FUNCTION_READ)) {
+                                opcConnectManger.getOpcconnectpool().get(opcserveid).getReadopcexecute().dealAddItemResult(CommandImp.ADDITEMRESULT.analye(bytes));
+                            } else if (addjson.getString("function").equals(OpcExecute.FUNCTION_WRITE)) {
+                                opcConnectManger.getOpcconnectpool().get(opcserveid).getWriteopcexecute().dealAddItemResult(CommandImp.ADDITEMRESULT.analye(bytes));
+                            }
+                            logger.info(addjson.toJSONString());
                         }
                         break;
                     case 0x0c:
-                        if(CommandImp.REMOVEITEMRESULT.valid(bytes)){
+                        if (CommandImp.REMOVEITEMRESULT.valid(bytes)) {
                             logger.info("REMOVEITEMRESULT");
-                            opcConnectManger.getOpcconnectpool().get(opcserveid).dealRemoveResult( CommandImp.REMOVEITEMRESULT.analye(bytes));
-                            logger.debug(CommandImp.REMOVEITEMRESULT.analye(bytes).toJSONString());
+                            JSONObject removejson = CommandImp.REMOVEITEMRESULT.analye(bytes);
+                            if (removejson.getString("function").equals(OpcExecute.FUNCTION_READ)) {
+                                opcConnectManger.getOpcconnectpool().get(opcserveid).getReadopcexecute().dealRemoveResult(CommandImp.REMOVEITEMRESULT.analye(bytes));
+                            } else if (removejson.getString("function").equals(OpcExecute.FUNCTION_WRITE)) {
+                                opcConnectManger.getOpcconnectpool().get(opcserveid).getWriteopcexecute().dealRemoveResult(CommandImp.REMOVEITEMRESULT.analye(bytes));
+                            }
+                            logger.info(CommandImp.REMOVEITEMRESULT.analye(bytes).toJSONString());
+
                         }
                         break;
                     default:
@@ -163,8 +194,8 @@ public class MsgDecoder_Inbound extends ChannelInboundHandlerAdapter {
         InetSocketAddress ipSocket = (InetSocketAddress) ctx.channel().remoteAddress();
         String clientIp = ipSocket.getAddress().getHostAddress();
         Integer port = ipSocket.getPort();
-        logger.info("come out" + clientIp + ":" + port);
-        sessionManager.removeSessionModule(null,ctx);
+        logger.info(" because exception come out" + clientIp + ":" + port);
+        sessionManager.removeSessionModule(ctx);
 
 
     }
@@ -196,12 +227,12 @@ public class MsgDecoder_Inbound extends ChannelInboundHandlerAdapter {
     }
 
 
-    private int byteToInt(byte[] data){
+    private int byteToInt(byte[] data) {
 
-       int reult= ((data[0] << 24) & 0xff000000)|
-         ((data[1] << 16) & 0xff0000)|
-        ((data[2] << 8)  & 0xff00)|
-        ((data[3] << 0)  & 0xff);
+        int reult = ((data[0] << 24) & 0xff000000) |
+                ((data[1] << 16) & 0xff0000) |
+                ((data[2] << 8) & 0xff00) |
+                ((data[3] << 0) & 0xff);
 
         return reult;
     }
