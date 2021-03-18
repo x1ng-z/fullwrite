@@ -1,5 +1,7 @@
 package hs.fullwrite.opc;
 
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import hs.fullwrite.bean.OpcServeInfo;
 import hs.fullwrite.bean.Point;
 import hs.fullwrite.dao.service.OpcPointOperateService;
@@ -29,8 +31,8 @@ import java.util.concurrent.ExecutorService;
 public class OpcConnectManger /*implements Runnable*/ {
     private Logger logger = LoggerFactory.getLogger(OpcConnectManger.class);
 
-    private Map<Integer, OpcServeInfo> opcservepool = new ConcurrentHashMap();
-    private Map<Integer, OpcGroup> opcconnectpool = new ConcurrentHashMap();
+    private Map<Long, OpcServeInfo> opcservepool = new ConcurrentHashMap();
+    private Map<Long, OpcGroup> opcconnectpool = new ConcurrentHashMap();
 
     private SessionManager sessionManager;
 
@@ -77,6 +79,9 @@ public class OpcConnectManger /*implements Runnable*/ {
         opcGroup.setWriteopcexecute(writeopcexecute);
 
         List<Point> pointsByServeid = opcPointOperateService.findAllOpcPointsByServeid(serveInfo.getServeid());
+
+
+//        JSONArray jsonArray = new JSONArray();
         for (Point point : pointsByServeid) {
             RegisterEvent registerEvent = new RegisterEvent();
             registerEvent.setPoint(point);
@@ -84,7 +89,11 @@ public class OpcConnectManger /*implements Runnable*/ {
             if (point.getWriteable() == 1) {
                 writeopcexecute.addOPCEvent(registerEvent);
             }
+//            JSONObject msg=new JSONObject();
+//            msg.put("tag",point.getTag());
+//            jsonArray.add(msg);
         }
+
         return opcGroup;
     }
 
@@ -120,11 +129,11 @@ public class OpcConnectManger /*implements Runnable*/ {
     }
 
 
-    public Map<Integer, OpcServeInfo> getOpcservepool() {
+    public Map<Long, OpcServeInfo> getOpcservepool() {
         return opcservepool;
     }
 
-    public Map<Integer, OpcGroup> getOpcconnectpool() {
+    public Map<Long, OpcGroup> getOpcconnectpool() {
         return opcconnectpool;
     }
 

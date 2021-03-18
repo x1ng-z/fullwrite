@@ -8,9 +8,8 @@ import io.netty.channel.ChannelHandlerContext;
  * @date 2020/12/29 23:05
  */
 public class Session {
-   // private Module object;//apc module;
     private ChannelHandlerContext ctx;
-    private int opcserveid;
+    private long opcserveid;
     private String function;
 
 
@@ -23,11 +22,11 @@ public class Session {
     }
 
 
-    public int getOpcserveid() {
+    public long getOpcserveid() {
         return opcserveid;
     }
 
-    public void setOpcserveid(int opcserveid) {
+    public void setOpcserveid(long opcserveid) {
         this.opcserveid = opcserveid;
     }
 

@@ -2,7 +2,6 @@ package hs.fullwrite.dao.service;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
-import hs.fullwrite.contrl.OPCValueController;
 import hs.fullwrite.dao.influxdb.InfluxdbOperate;
 import org.influxdb.InfluxDB;
 import org.influxdb.dto.BoundParameterQuery;
@@ -43,7 +42,7 @@ public class InfluxdbOperateService implements InfluxdbOperate {
         org.influxdb.dto.Point.Builder point= Point.measurement(measurement)
                 .time(millisTime, TimeUnit.MILLISECONDS);
         for(String key:data.keySet()){
-            point.addField(key,data.getFloatValue(key));
+            point.addField(key,data.getFloat(key));
         }
         influxDB.write(point.build());
     }
@@ -53,7 +52,7 @@ public class InfluxdbOperateService implements InfluxdbOperate {
      * @param endtime now Instant.now()
      * */
     @Override
-    public JSONArray readData(Set<String> key, String measurement, Instant starttime,Instant endtime) {
+    public JSONArray readSomeTimeData(Set<String> key, String measurement, Instant starttime, Instant endtime) {
         JSONArray _result=new JSONArray();
 
         StringBuilder tagname = new StringBuilder();
@@ -65,6 +64,48 @@ public class InfluxdbOperateService implements InfluxdbOperate {
                 .forDatabase("mydb")
                 .bind("start", starttime)
                 .bind("end", endtime)
+                .create();
+
+        QueryResult queryResult = null;
+        try {
+            queryResult = influxDB.query(query);
+        } catch (Exception e) {
+            logger.error(e.getMessage(),e);
+//            logger.error(measureName+sampletimelength);
+//            logger.error(tagname.substring(0, tagname.length() - 1));
+            return _result;
+        }
+
+        List<QueryResult.Result> queryResultResults = queryResult.getResults();
+        for (QueryResult.Result result : queryResultResults) {
+            if (result.getSeries() == null) {
+                logger.error("have no data");
+                return _result;
+            }
+            for (QueryResult.Series serie : result.getSeries()) {
+                for (List<Object> list : serie.getValues()) {
+                    JSONObject row = new JSONObject();
+                    _result.add(row);
+                    for (int i = 0; i < serie.getColumns().size(); ++i) {
+                        row.put(serie.getColumns().get(i), list.get(i));
+                    }
+                }
+            }
+        }
+        return _result;
+    }
+
+    @Override
+    public JSONArray readNewestData(Set<String> key, String measurement) {
+        JSONArray _result=new JSONArray();
+
+        StringBuilder tagname = new StringBuilder();
+        for (String tag : key) {
+            tagname.append("\""+tag+"\"" + ",");
+        }
+        Query query = null;
+        query = BoundParameterQuery.QueryBuilder.newQuery("SELECT " + tagname.substring(0, tagname.length() - 1) + " FROM " + measurement + "  ORDER BY time DESC  LIMIT 1")// LIMIT 1
+                .forDatabase("mydb")
                 .create();
 
         QueryResult queryResult = null;

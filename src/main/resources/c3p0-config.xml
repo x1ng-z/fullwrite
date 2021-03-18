@@ -2,11 +2,11 @@
 <c3p0-config>
     <default-config>
         <property name="jdbcUrl">
-            <![CDATA[jdbc:mysql://192.168.10.212:3306/ocean?characterEncoding=utf-8&serverTimezone=Asia/Shanghai]]>
+            <![CDATA[jdbc:mysql://127.0.0.1:3306/ocean?characterEncoding=utf-8&serverTimezone=Asia/Shanghai]]>
         </property>
         <property name="driverClass">com.mysql.cj.jdbc.Driver</property>
-        <property name="user">admin</property>
-        <property name="password">password</property>
+        <property name="user">root</property>
+        <property name="password"></property>
         　　　　<!--连接池中保留的最大连接数。默认值: 15 -->
         <property name="maxPoolSize">20</property>
         　　　　<!-- 连接池中保留的最小连接数，默认为：3 -->

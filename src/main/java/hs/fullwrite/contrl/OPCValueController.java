@@ -1,7 +1,8 @@
 package hs.fullwrite.contrl;
 
 import com.alibaba.fastjson.JSONObject;
-import hs.fullwrite.opc.*;
+import hs.fullwrite.opc.OpcConnectManger;
+import hs.fullwrite.opc.OpcGroup;
 import hs.fullwrite.opc.event.WriteEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,8 +34,10 @@ public class OPCValueController {
         try {
             for (String tag : splittags) {
                 for (OpcGroup opcGroup : opcConnectManger.getOpcconnectpool().values()) {
-                    if (opcGroup.getReadopcexecute().getRegisteredMeasurePoint().containsKey(tag)) {
-                        msg.put(tag, opcGroup.getReadopcexecute().getRegisteredMeasurePoint().get(tag).getValue());
+                    if (opcGroup.getReadopcexecute().getRegisteredMeasurePointpool().containsKey(tag)) {
+                        if(opcGroup.getReadopcexecute().getRegisteredMeasurePointpool().get(tag).getInstant()!=null){
+                            msg.put(tag, opcGroup.getReadopcexecute().getRegisteredMeasurePointpool().get(tag).getValue());
+                        }
                         break;
                     }
                 }
@@ -49,6 +52,13 @@ public class OPCValueController {
     }
 
 
+
+
+    /**
+     * {tag:value,
+     * tag:value
+     * }
+     * */
     @RequestMapping("/write")
     public String writeopctags(@RequestParam("tagvalue") String tags) {
         JSONObject msg = JSONObject.parseObject(tags);
@@ -56,14 +66,14 @@ public class OPCValueController {
         boolean writeresult = true;
         try {
             for (String tag : msg.keySet()) {
-                System.out.println(tag + "-------" + msg.getFloat(tag));
+//                System.out.println(tag + "-------" + msg.getFloat(tag));
 
                 for (OpcGroup opcGroup : opcConnectManger.getOpcconnectpool().values()) {
 
-                    if (opcGroup.getWriteopcexecute().getRegisteredMeasurePoint().containsKey(tag)) {
+                    if (opcGroup.getWriteopcexecute().getRegisteredMeasurePointpool().containsKey(tag)) {
                         if(opcGroup.getWriteopcexecute().isOpcServeOnline()){
-                            WriteEvent writeEvent = new WriteEvent();
-                            writeEvent.setPoint(opcGroup.getWriteopcexecute().getRegisteredMeasurePoint().get(tag).getPoint());
+                            WriteEvent writeEvent = new WriteEvent(msg.getFloat(tag));
+                            writeEvent.setPoint(opcGroup.getWriteopcexecute().getRegisteredMeasurePointpool().get(tag).getPoint());
                             writeEvent.setValue(msg.getFloat(tag));
                             writeresult = opcGroup.getWriteopcexecute().addOPCEvent(writeEvent);
                             logger.info("add write event");

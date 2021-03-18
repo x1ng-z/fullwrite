@@ -2,8 +2,6 @@ package hs.fullwrite.dao.service;
 
 import hs.fullwrite.bean.Point;
 import hs.fullwrite.dao.mysql.OpcPointOperate;
-
-import org.apache.ibatis.annotations.Param;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -53,8 +51,8 @@ public class OpcPointOperateService {
 
     @Transactional(isolation = Isolation.READ_COMMITTED,transactionManager="mysqlTransactionManager")
 
-    public List<Point> findAllOpcPointsByServeid(int serveid){
-        return opcPointOperate.findAllOpcPointsByServeid(serveid);
+    public List<Point> findAllOpcPointsByServeid(long serveid){
+        return opcPointOperate.findAllOpcPointsByServeid(new Long(serveid).intValue());
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED,transactionManager="mysqlTransactionManager")

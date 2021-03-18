@@ -6,15 +6,15 @@ package hs.fullwrite.bean;
  * @date 2021/1/4 14:37
  */
 public class OpcServeInfo {
-    private int serveid;
+    private long serveid;
     private String servename;
     private String serveip;
 
-    public int getServeid() {
+    public long getServeid() {
         return serveid;
     }
 
-    public void setServeid(int serveid) {
+    public void setServeid(long serveid) {
         this.serveid = serveid;
     }
 

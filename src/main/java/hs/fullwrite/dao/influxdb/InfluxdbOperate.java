@@ -14,5 +14,6 @@ import java.util.Set;
 public interface InfluxdbOperate {
 
    void writeData(JSONObject data, String measurement, long millisTime);
-   JSONArray readData(Set<String> key, String measurement, Instant starttime, Instant endtime);
+   JSONArray readSomeTimeData(Set<String> key, String measurement, Instant starttime, Instant endtime);
+   JSONArray readNewestData(Set<String> key, String measuremen);
 }

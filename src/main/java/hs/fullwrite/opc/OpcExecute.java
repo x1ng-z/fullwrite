@@ -9,10 +9,7 @@ import hs.fullwrite.longTimeServe.InfluxdbWrite;
 import hs.fullwrite.longTimeServe.event.InfluxWriteEvent;
 import hs.fullwrite.opc.bridge.ExecutePythonBridge;
 import hs.fullwrite.opc.event.Event;
-import hs.fullwrite.opc.event.RegisterEvent;
-import hs.fullwrite.opc.event.UnRegisterEvent;
-import hs.fullwrite.opc.event.WriteEvent;
-import hs.fullwrite.opcproxy.CommandImp;
+import hs.fullwrite.opcproxy.Command.CommandImp;
 import hs.fullwrite.opcproxy.session.Session;
 import hs.fullwrite.opcproxy.session.SessionManager;
 import org.slf4j.Logger;
@@ -20,6 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.UnsupportedEncodingException;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -31,11 +29,10 @@ import java.util.concurrent.TimeUnit;
  * @date 2021/1/5 15:45
  */
 public class OpcExecute implements Runnable {
-    private Logger logger = LoggerFactory.getLogger(OpcConnect.class);
+    private Logger logger = LoggerFactory.getLogger(OpcExecute.class);
 
     public static final String FUNCTION_READ = "read";
     public static final String FUNCTION_WRITE = "write";
-
     private ExecutePythonBridge executePythonBridge;
     private String exename;
     private String ip;
@@ -47,17 +44,32 @@ public class OpcExecute implements Runnable {
     private SessionManager sessionManager;
     private InfluxdbWrite influxdbWrite;
     private int opcsaveinterval;
-    private long writetimestamp=System.currentTimeMillis();
+    private long writetimestamp = System.currentTimeMillis();
     private String function;
 
-    private Map<String, MeasurePoint> registeredMeasurePoint = new ConcurrentHashMap();
-    private Map<String, MeasurePoint> waittoregistertag = new ConcurrentHashMap<>();
-    private LinkedBlockingQueue<Event> eventLinkedBlockingQueue = new LinkedBlockingQueue();
+
+    /**
+     * 已经注册的点号
+     */
+    private Map<String, MeasurePoint> registeredMeasurePointpool = new ConcurrentHashMap();
+    /**
+     * 待注册的点号
+     */
+    private Map<String, MeasurePoint> waittoregistertagpool = new ConcurrentHashMap<>();
+    /**
+     * 事件表
+     */
+    private LinkedBlockingQueue<Event> eventLinkedBlockingQueue = new LinkedBlockingQueue(Integer.MAX_VALUE);
+
+    /**
+     * 重连次数，当为大于0的时候，则在读取到数据(read)或者接受心跳包时(write)重新进行连接
+     */
 
     private int reconnectcount = 0;
 
-    public synchronized void addwaitaddIteambuf(MeasurePoint m) {
-        waittoregistertag.put(m.getPoint().getTag(), m);
+
+    public void addwaitaddIteambuf(MeasurePoint m) {
+        waittoregistertagpool.put(m.getPoint().getTag(), m);
     }
 
     public boolean addOPCEvent(Event event) {
@@ -65,7 +77,7 @@ public class OpcExecute implements Runnable {
     }
 
 
-    public OpcExecute(int opcsaveinterval ,String function, OpcServeInfo serveInfo, String exename, String ip, String port, String opcsevename, String opcseveip, String opcsevid, SessionManager sessionManager, InfluxdbWrite influxdbWrite) {
+    public OpcExecute(int opcsaveinterval, String function, OpcServeInfo serveInfo, String exename, String ip, String port, String opcsevename, String opcseveip, String opcsevid, SessionManager sessionManager, InfluxdbWrite influxdbWrite) {
         this.function = function;
         this.serveInfo = serveInfo;
         this.exename = System.getProperty("user.dir") + "\\" + exename;
@@ -76,15 +88,20 @@ public class OpcExecute implements Runnable {
         this.opcsevid = opcsevid;
         this.sessionManager = sessionManager;
         this.influxdbWrite = influxdbWrite;
-        this.opcsaveinterval=opcsaveinterval;
-        executePythonBridge = new ExecutePythonBridge(exename, ip, port, opcsevename, opcseveip, opcsevid,function);
+        this.opcsaveinterval = opcsaveinterval;
+        executePythonBridge = new ExecutePythonBridge(exename, ip, port, opcsevename, opcseveip, opcsevid, function);
     }
 
-    private boolean isneedWrite(){
-        if(System.currentTimeMillis()-writetimestamp>opcsaveinterval*1000){
-            writetimestamp=System.currentTimeMillis();
+    private boolean isneedWriteinflux() {
+
+        if (System.currentTimeMillis() - writetimestamp > opcsaveinterval * 1000) {
+            writetimestamp = System.currentTimeMillis();
+            logger.info("check is need write");
+
+
             return true;
-        }else {
+        } else {
+            logger.info("check isn't need write");
             return false;
         }
     }
@@ -105,11 +122,16 @@ public class OpcExecute implements Runnable {
     }
 
 
+    /**
+     * 这里有个主意点
+     * 在opc连接成功后，有些opc服务器需要断开，再重新连接读到的数据才是正确的，因此
+     * 在连接的时候，设置重连次数为1，这样在opc读数据成功那一次，要进行数据更新的时候，
+     * 把进行重连操作，使得读取数据不异常！
+     */
     public synchronized void connect() {
-
-//        null == sessionManager.getModulepoolbynodeid().get(serveInfo.getServeid())
         if (!isOpcServeOnline()) {
-            logger.info("*********need connect "+function);
+            logger.info("*********need connect " + function);
+            //set reconnect count 1
             setReconnectcount(1);
             executePythonBridge.stop();
             executePythonBridge.execute();
@@ -117,8 +139,9 @@ public class OpcExecute implements Runnable {
             while (trycheck-- > 0) {
                 if (isOpcServeOnline()) {
                     logger.info("********" + opcsevename + opcseveip + " connect success");
-                    for (MeasurePoint measurePoint : registeredMeasurePoint.values()) {
-                        sendAddItemCmd(measurePoint.getPoint().getTag());
+                    registeredMeasurePointpool.clear();
+                    if (waittoregistertagpool.size() > 0) {
+                        sendPatchAddItemCmd(waittoregistertagpool.values());
                     }
                     break;
                 } else {
@@ -131,7 +154,6 @@ public class OpcExecute implements Runnable {
                     return;
                 }
             }
-//            registeredMeasurePoint.clear();
 
         } else {
             logger.info(" connect status is hold");
@@ -140,31 +162,31 @@ public class OpcExecute implements Runnable {
 
 
     public synchronized void reconnect() {
-        logger.info("**** reconnect "+function);
+        logger.info("**** reconnect " + function);
         if (!isOpcServeOnline()) {
-//            setReconnectcount(1);
             executePythonBridge.stop();
             executePythonBridge.execute();
             int trycheck = 3;
             while (trycheck-- > 0) {
                 if (isOpcServeOnline()) {
-                    logger.info(opcsevename + opcseveip + " reconnect success");
-                    for (MeasurePoint measurePoint : registeredMeasurePoint.values()) {
-                        sendAddItemCmd(measurePoint.getPoint().getTag());
+                    logger.info(opcsevename + opcseveip + function + " reconnect success");
+                    logger.info(opcsevename + opcseveip + function + "registeredMeasurePoint size=" + registeredMeasurePointpool.size());
+                    registeredMeasurePointpool.clear();
+                    if(waittoregistertagpool.size()>0){
+                        sendPatchAddItemCmd(waittoregistertagpool.values());
                     }
+
                     break;
                 } else {
                     logger.info("try reconnect failed");
                 }
                 try {
-                    TimeUnit.SECONDS.sleep(5);
+                    TimeUnit.SECONDS.sleep(3);
                 } catch (InterruptedException e) {
                     logger.error(e.getMessage(), e);
                     return;
                 }
             }
-//            registeredMeasurePoint.clear();
-
         } else {
             logger.info(" connect status is hold");
         }
@@ -175,7 +197,7 @@ public class OpcExecute implements Runnable {
         JSONObject msg = new JSONObject();
         msg.put("msg", "read");
         try {
-            Session session=sessionManager.getSpecialSession(serveInfo.getServeid(),function);
+            Session session = sessionManager.getSpecialSession(serveInfo.getServeid(), function);
             session.getCtx().writeAndFlush(
                     CommandImp.READ.build(msg.toJSONString().getBytes("utf-8"), serveInfo.getServeid())
             );
@@ -191,7 +213,7 @@ public class OpcExecute implements Runnable {
                 Session session = sessionManager.getSpecialSession(serveInfo.getServeid(), function);
                 if (session != null) {
                     sessionManager.removeSessionModule(session.getCtx());
-                    if(session.getCtx()!=null){
+                    if (session.getCtx() != null) {
                         session.getCtx().close();
                     }
                 }
@@ -204,7 +226,7 @@ public class OpcExecute implements Runnable {
             if (key.equals("function")) {
                 continue;
             }
-            MeasurePoint measurePoint = registeredMeasurePoint.get(key);
+            MeasurePoint measurePoint = registeredMeasurePointpool.get(key);
             if (measurePoint != null) {
                 if (measurePoint.getPoint().getType().equals(Point.FLOATTYPE)) {
                     float value = datajson.getFloatValue(key);
@@ -214,19 +236,19 @@ public class OpcExecute implements Runnable {
                     }
 
                     measurePoint.setValue(value);
-                    String influxdbkey=((measurePoint.getPoint().getStandard()==null)||(measurePoint.getPoint().getStandard().equals("")))?measurePoint.getPoint().getTag():measurePoint.getPoint().getStandard();
+                    String influxdbkey = ((measurePoint.getPoint().getStandard() == null) || (measurePoint.getPoint().getStandard().equals(""))) ? measurePoint.getPoint().getTag() : measurePoint.getPoint().getStandard();
                     influxwritedata.put(influxdbkey, value);
                 } else if (measurePoint.getPoint().getType().equals(Point.BOOLTYPE)) {
                     //bool 非0则为1 为0才为0
                     measurePoint.setValue(datajson.getFloatValue(key) != 0 ? 1 : 0);
-                    String influxdbkey=((measurePoint.getPoint().getStandard()==null)||(measurePoint.getPoint().getStandard().equals("")))?measurePoint.getPoint().getTag():measurePoint.getPoint().getStandard();
+                    String influxdbkey = ((measurePoint.getPoint().getStandard() == null) || (measurePoint.getPoint().getStandard().equals(""))) ? measurePoint.getPoint().getTag() : measurePoint.getPoint().getStandard();
                     influxwritedata.put(influxdbkey, datajson.getFloatValue(key) != 0 ? 1 : 0);
                 }
                 measurePoint.setInstant(Instant.now());
             }
         }
 
-        if (influxdbWrite != null&&isneedWrite()) {
+        if (influxdbWrite != null && isneedWriteinflux()) {
             InfluxWriteEvent event = new InfluxWriteEvent();
             event.setData(influxwritedata);
             event.setTimestamp(System.currentTimeMillis());
@@ -238,14 +260,13 @@ public class OpcExecute implements Runnable {
 
 
     public void sendWriteItemCmd(String tag, float value) {
-
         JSONArray jsonArray = new JSONArray();
         JSONObject msg = new JSONObject();
         msg.put("tag", tag);
         msg.put("value", value);
         jsonArray.add(msg);
         try {
-            sessionManager.getSpecialSession(serveInfo.getServeid(),function).getCtx().writeAndFlush(
+            sessionManager.getSpecialSession(serveInfo.getServeid(), function).getCtx().writeAndFlush(
                     CommandImp.WRITE.build(jsonArray.toJSONString().getBytes("utf-8"), serveInfo.getServeid())
             );
         } catch (UnsupportedEncodingException e) {
@@ -261,7 +282,7 @@ public class OpcExecute implements Runnable {
         JSONArray jsonArray = new JSONArray();
         jsonArray.add(msg);
         try {
-            sessionManager.getSpecialSession(serveInfo.getServeid(),function).getCtx().writeAndFlush(
+            sessionManager.getSpecialSession(serveInfo.getServeid(), function).getCtx().writeAndFlush(
                     CommandImp.REMOVEITEM.build(jsonArray.toJSONString().getBytes("utf-8"), serveInfo.getServeid())
             );
         } catch (UnsupportedEncodingException e) {
@@ -276,20 +297,63 @@ public class OpcExecute implements Runnable {
             }
             if (1 == datajson.getInteger(key)) {
 //                MeasurePoint point=waittoregistertag.get(key);
-                registeredMeasurePoint.remove(key);
+                registeredMeasurePointpool.remove(key);
             }
         }
     }
 
-    public void sendAddItemCmd(String tag) {
+    public boolean sendAddItemCmd(String tag) {
         JSONObject msg = new JSONObject();
         msg.put("tag", tag);
         JSONArray jsonArray = new JSONArray();
         jsonArray.add(msg);
         try {
-            sessionManager.getSpecialSession(serveInfo.getServeid(),function).getCtx().writeAndFlush(
-                    CommandImp.ADDITEM.build(jsonArray.toJSONString().getBytes("utf-8"), serveInfo.getServeid())
-            );
+            if (sessionManager.getSpecialSession(serveInfo.getServeid(), function).getCtx() != null) {
+                sessionManager.getSpecialSession(serveInfo.getServeid(), function).getCtx().writeAndFlush(CommandImp.ADDITEM.build(jsonArray.toJSONString().getBytes("utf-8"), serveInfo.getServeid()));
+            } else {
+                return false;
+            }
+
+        } catch (UnsupportedEncodingException e) {
+            logger.error(e.getMessage(), e);
+        }
+        return false;
+    }
+
+    public void sendPatchAddItemCmd(Collection<MeasurePoint> measurePointCollection) {
+        JSONArray jsonArray = new JSONArray();
+        for (MeasurePoint mp : measurePointCollection) {
+            JSONObject msg = new JSONObject();
+            msg.put("tag", mp.getPoint().getTag());
+            jsonArray.add(msg);
+        }
+        try {
+            logger.info("BATCHADDITEM " + measurePointCollection.size());
+            int indexwaitsendnum = 0;
+            JSONArray waitsenddata = new JSONArray();
+            //c++最长字符串长度16380
+            for (int indexsplit = 0; indexsplit < jsonArray.size(); indexsplit++) {
+                if (waitsenddata.toJSONString().getBytes("utf-8").length < 16380) {
+                    waitsenddata.add(jsonArray.getJSONObject(indexsplit));
+                    indexwaitsendnum++;
+                } else {
+                    waitsenddata.remove(indexwaitsendnum - 1);
+                    if (waitsenddata.size() > 0) {
+                        sessionManager.getSpecialSession(serveInfo.getServeid(), function).getCtx().writeAndFlush(
+                                CommandImp.BATCHADDITEM.build(waitsenddata.toJSONString().getBytes("utf-8"), serveInfo.getServeid()));
+                    }
+                    waitsenddata = new JSONArray();
+                    indexwaitsendnum = 0;
+                    indexsplit--;
+                }
+            }
+
+            //最后一批点号注册
+            if (waitsenddata.size() > 0) {
+                logger.info(waitsenddata.toJSONString());
+                sessionManager.getSpecialSession(serveInfo.getServeid(), function).getCtx().writeAndFlush(
+                        CommandImp.BATCHADDITEM.build(waitsenddata.toJSONString().getBytes("utf-8"), serveInfo.getServeid()));
+            }
         } catch (UnsupportedEncodingException e) {
             logger.error(e.getMessage(), e);
         }
@@ -302,24 +366,24 @@ public class OpcExecute implements Runnable {
                 continue;
             }
             if (1 == datajson.getInteger(key)) {
-                MeasurePoint point = waittoregistertag.get(key);
-                registeredMeasurePoint.put(key, point);
+                MeasurePoint point = waittoregistertagpool.get(key);
+                registeredMeasurePointpool.put(key, point);
             }
         }
     }
 
 
+
+
     public void sendStopItemsCmd() {
         JSONObject msg = new JSONObject();
         msg.put("msg", "stop");
-        Session session=sessionManager.getSpecialSession(serveInfo.getServeid(),function);
-        if(session==null){
+        Session session = sessionManager.getSpecialSession(serveInfo.getServeid(), function);
+        if (session == null) {
             return;
         }
         try {
-            session.getCtx().writeAndFlush(
-                    CommandImp.STOP.build(msg.toJSONString().getBytes("utf-8"), serveInfo.getServeid())
-            );
+            session.getCtx().writeAndFlush(CommandImp.STOP.build(msg.toJSONString().getBytes("utf-8"), new Long(serveInfo.getServeid()).intValue()));
         } catch (UnsupportedEncodingException e) {
             logger.error(e.getMessage(), e);
         }
@@ -336,44 +400,23 @@ public class OpcExecute implements Runnable {
             logger.info("*****OPC RUN");
             try {
                 connect();
-
-                if (isOpcServeOnline()) {
-
-                    logger.info("*****Connect success try deal event");
-                    while (eventLinkedBlockingQueue.size() != 0) {
-                        Event event = eventLinkedBlockingQueue.poll();
-                        if ((event != null) && (event.getPoint() != null)) {
-                            if (event instanceof WriteEvent) {
-                                if (registeredMeasurePoint.containsKey(event.getPoint().getTag())) {
-                                    WriteEvent writeevent = (WriteEvent) event;
-                                    sendWriteItemCmd(writeevent.getPoint().getTag(), writeevent.getValue());
-
-                                }
-
-//                            logger.info("execute write event");
-                            } else if (event instanceof RegisterEvent) {
-                                RegisterEvent registerevent = (RegisterEvent) event;
-                                if (!registeredMeasurePoint.containsKey(registerevent.getPoint().getTag())) {
-                                    MeasurePoint measurePoint = new MeasurePoint();
-                                    measurePoint.setPoint(registerevent.getPoint());
-
-                                    waittoregistertag.put(registerevent.getPoint().getTag(), measurePoint);
-                                    sendAddItemCmd(registerevent.getPoint().getTag());
-                                    logger.info("***** even"+registerevent.getPoint().getTag());
-                                }
-                            } else if (event instanceof UnRegisterEvent) {
-                                if (registeredMeasurePoint.containsKey(event.getPoint().getTag())) {
-                                    UnRegisterEvent unregisterevent = (UnRegisterEvent) event;
-                                    sendRemoveItemCmd(unregisterevent.getPoint().getTag());
-                                }
-
+                //时间处理
+                synchronized (this) {
+                    if (isOpcServeOnline()) {
+                        while (eventLinkedBlockingQueue.size() != 0) {
+                            Event event = eventLinkedBlockingQueue.poll();
+                            if ((event != null)) {
+                                event.execute(this);
                             }
                         }
                     }
                 }
 
-                if (registeredMeasurePoint.size() > 0&&function.equals(OpcExecute.FUNCTION_READ)) {
-                    sendReadAllItemsCmd();
+                //数据读取
+                synchronized (this) {
+                    if (registeredMeasurePointpool.size() > 0 && function.equals(OpcExecute.FUNCTION_READ)) {
+                        sendReadAllItemsCmd();
+                    }
                 }
 
                 TimeUnit.SECONDS.sleep(1);
@@ -390,8 +433,8 @@ public class OpcExecute implements Runnable {
         return executePythonBridge;
     }
 
-    public Map<String, MeasurePoint> getRegisteredMeasurePoint() {
-        return registeredMeasurePoint;
+    public Map<String, MeasurePoint> getRegisteredMeasurePointpool() {
+        return registeredMeasurePointpool;
     }
 
     public synchronized int getReconnectcount() {
@@ -404,5 +447,69 @@ public class OpcExecute implements Runnable {
 
     public synchronized void minsReconnectcount() {
         reconnectcount--;
+    }
+
+    public SessionManager getSessionManager() {
+        return sessionManager;
+    }
+
+    public String getExename() {
+        return exename;
+    }
+
+    public String getIp() {
+        return ip;
+    }
+
+    public String getPort() {
+        return port;
+    }
+
+    public String getOpcsevename() {
+        return opcsevename;
+    }
+
+    public String getOpcseveip() {
+        return opcseveip;
+    }
+
+    public String getOpcsevid() {
+        return opcsevid;
+    }
+
+    public OpcServeInfo getServeInfo() {
+        return serveInfo;
+    }
+
+    public InfluxdbWrite getInfluxdbWrite() {
+        return influxdbWrite;
+    }
+
+    public int getOpcsaveinterval() {
+        return opcsaveinterval;
+    }
+
+    public long getWritetimestamp() {
+        return writetimestamp;
+    }
+
+    public String getFunction() {
+        return function;
+    }
+
+    public Map<String, MeasurePoint> getWaittoregistertagpool() {
+        return waittoregistertagpool;
+    }
+
+    public LinkedBlockingQueue<Event> getEventLinkedBlockingQueue() {
+        return eventLinkedBlockingQueue;
+    }
+
+    public Session getMySession() {
+        return sessionManager.getSpecialSession(serveInfo.getServeid(), function);
+    }
+
+    public void addRetryEvent(Event event) {
+        eventLinkedBlockingQueue.offer(event);
     }
 }

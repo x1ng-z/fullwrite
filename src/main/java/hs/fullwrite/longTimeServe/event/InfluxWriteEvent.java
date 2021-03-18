@@ -1,10 +1,6 @@
 package hs.fullwrite.longTimeServe.event;
 
 import com.alibaba.fastjson.JSONObject;
-import hs.fullwrite.longTimeServe.InfluxdbWrite;
-import org.influxdb.dto.Point;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * @author zzx

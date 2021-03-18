@@ -30,8 +30,8 @@ public class ExecutePythonBridge {
     public boolean stop() {
         if (p != null) {
             p.destroy();
-            result.interrupt();
-            error.interrupt();
+//            result.interrupt();
+//            error.interrupt();
             p = null;
             return true;
         }
@@ -65,8 +65,8 @@ public class ExecutePythonBridge {
             error.start();
 
         } catch (Exception e) {
-            logger.error(e.getMessage(), e);
-            logger.error("exename " + exename);
+//            logger.error(e.getMessage(), e);
+            logger.error("no find exename " + exename+"");
             return false;
         }
         return true;

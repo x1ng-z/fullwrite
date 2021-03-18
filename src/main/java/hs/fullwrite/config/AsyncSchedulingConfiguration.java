@@ -1,7 +1,6 @@
 package hs.fullwrite.config;
 
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.scheduling.TaskScheduler;

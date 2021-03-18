@@ -139,6 +139,15 @@
         </dependency>
 
 
+        <dependency>
+            <groupId>jdbc4</groupId>
+            <artifactId>jdbc</artifactId>
+            <version>0.0.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/sqljdbc4.jar</systemPath>
+        </dependency>
+
+
 
         <dependency>
             <groupId>hs</groupId>

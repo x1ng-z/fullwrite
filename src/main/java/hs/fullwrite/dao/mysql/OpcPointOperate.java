@@ -1,6 +1,5 @@
 package hs.fullwrite.dao.mysql;
 
-import hs.fullwrite.bean.OpcServeInfo;
 import hs.fullwrite.bean.Point;
 import org.apache.ibatis.annotations.MapKey;
 import org.apache.ibatis.annotations.Param;
