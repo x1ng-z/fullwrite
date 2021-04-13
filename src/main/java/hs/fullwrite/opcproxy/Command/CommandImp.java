@@ -165,7 +165,7 @@ public enum CommandImp implements Command {
         @Override
         public void operate(byte[] context, ChannelHandlerContext ctx, SessionManager sessionManager, OpcConnectManger opcConnectManger) {
             if (valid(context)) {
-                logger.debug(analye(context).toJSONString());
+                logger.info("writeresult:"+analye(context).toJSONString());
             }
         }
     },
@@ -330,7 +330,6 @@ public enum CommandImp implements Command {
         byte[] paramercontext = Arrays.copyOfRange(context, 10, context.length);
         try {
             String str = new String(paramercontext, "UTF-8");
-//                logger.info(str);
             try {
                 JSONObject.parseObject(str);
                 return true;

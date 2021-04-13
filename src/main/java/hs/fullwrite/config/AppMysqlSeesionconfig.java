@@ -5,6 +5,9 @@ import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -23,6 +26,10 @@ import java.io.IOException;
 @Configuration
 @MapperScan(basePackages = {"hs.fullwrite.dao.mysql"},annotationClass = Repository.class,sqlSessionFactoryRef = "mysqlsessionfactory" )
 public class AppMysqlSeesionconfig {
+
+    @Autowired
+    private DefaultListableBeanFactory defaultListableBeanFactory;
+
     @Value("${mybatis.mapper-locations-mysql}")
     private String mapperXMLConfigPath;
     @Value("${mybatis.type-aliases-package}")

@@ -95,12 +95,12 @@ public class MsgDecoderInbound extends ChannelInboundHandlerAdapter {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
         super.exceptionCaught(ctx, cause);
-        logger.error(cause.getMessage(), cause);
+//        logger.error(cause.getMessage(), cause);
         InetSocketAddress ipSocket = (InetSocketAddress) ctx.channel().remoteAddress();
         String clientIp = ipSocket.getAddress().getHostAddress();
         Integer port = ipSocket.getPort();
         logger.info(" because exception come out" + clientIp + ":" + port);
-        sessionManager.removeSessionModule(ctx);
+//        sessionManager.removeSessionModule(ctx);
 
 
     }

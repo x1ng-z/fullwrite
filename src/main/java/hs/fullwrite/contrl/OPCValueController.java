@@ -29,6 +29,7 @@ public class OPCValueController {
 
     @RequestMapping("/read")
     public String readopctags(@RequestParam("tags") String tags) {
+        logger.info("/read"+tags);
         JSONObject msg = new JSONObject();
         String[] splittags = tags.split(",");
         try {
@@ -61,15 +62,13 @@ public class OPCValueController {
      * */
     @RequestMapping("/write")
     public String writeopctags(@RequestParam("tagvalue") String tags) {
+        logger.info("/write"+tags);
         JSONObject msg = JSONObject.parseObject(tags);
         JSONObject result = new JSONObject();
         boolean writeresult = true;
         try {
             for (String tag : msg.keySet()) {
-//                System.out.println(tag + "-------" + msg.getFloat(tag));
-
                 for (OpcGroup opcGroup : opcConnectManger.getOpcconnectpool().values()) {
-
                     if (opcGroup.getWriteopcexecute().getRegisteredMeasurePointpool().containsKey(tag)) {
                         if(opcGroup.getWriteopcexecute().isOpcServeOnline()){
                             WriteEvent writeEvent = new WriteEvent(msg.getFloat(tag));

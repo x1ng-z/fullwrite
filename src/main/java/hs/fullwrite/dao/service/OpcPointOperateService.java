@@ -17,8 +17,11 @@ import java.util.Map;
  */
 @Service
 public class OpcPointOperateService {
+
+
     @Autowired
     private OpcPointOperate opcPointOperate;
+
 
     @Transactional(isolation = Isolation.READ_COMMITTED,transactionManager="mysqlTransactionManager")
     public  int inserOpcPoint( Point point){

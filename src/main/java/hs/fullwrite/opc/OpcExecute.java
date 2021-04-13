@@ -96,12 +96,10 @@ public class OpcExecute implements Runnable {
 
         if (System.currentTimeMillis() - writetimestamp > opcsaveinterval * 1000) {
             writetimestamp = System.currentTimeMillis();
-            logger.info("check is need write");
-
-
+//            logger.info("check is need write");
             return true;
         } else {
-            logger.info("check isn't need write");
+//            logger.info("check isn't need write");
             return false;
         }
     }
@@ -155,8 +153,6 @@ public class OpcExecute implements Runnable {
                 }
             }
 
-        } else {
-            logger.info(" connect status is hold");
         }
     }
 
@@ -172,10 +168,9 @@ public class OpcExecute implements Runnable {
                     logger.info(opcsevename + opcseveip + function + " reconnect success");
                     logger.info(opcsevename + opcseveip + function + "registeredMeasurePoint size=" + registeredMeasurePointpool.size());
                     registeredMeasurePointpool.clear();
-                    if(waittoregistertagpool.size()>0){
+                    if (waittoregistertagpool.size() > 0) {
                         sendPatchAddItemCmd(waittoregistertagpool.values());
                     }
-
                     break;
                 } else {
                     logger.info("try reconnect failed");
@@ -373,8 +368,6 @@ public class OpcExecute implements Runnable {
     }
 
 
-
-
     public void sendStopItemsCmd() {
         JSONObject msg = new JSONObject();
         msg.put("msg", "stop");
@@ -397,7 +390,6 @@ public class OpcExecute implements Runnable {
     @Override
     public void run() {
         while (!Thread.currentThread().isInterrupted()) {
-            logger.info("*****OPC RUN");
             try {
                 connect();
                 //时间处理
@@ -413,8 +405,9 @@ public class OpcExecute implements Runnable {
                 }
 
                 //数据读取
-                synchronized (this) {
-                    if (registeredMeasurePointpool.size() > 0 && function.equals(OpcExecute.FUNCTION_READ)) {
+
+                if (registeredMeasurePointpool.size() > 0 && function.equals(OpcExecute.FUNCTION_READ)) {
+                    synchronized (this) {
                         sendReadAllItemsCmd();
                     }
                 }
@@ -427,6 +420,7 @@ public class OpcExecute implements Runnable {
             }
 
         }
+
     }
 
     public ExecutePythonBridge getExecutePythonBridge() {
